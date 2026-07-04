@@ -1,0 +1,6 @@
+{
+  "name": "AI Price Comparison Agent",
+  "description": "An AI-powered price comparison and smart recommendation agent built with Node.js, Express, React, and Google Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
