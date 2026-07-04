@@ -6,7 +6,7 @@
 
 This contains everything you need to run your app locally.
 
-View your app in AI Studio: https://ai.studio/apps/87209aac-90c1-49d8-ad08-318abdcf07df
+View your app in AI Studio: https://remix-ai-price-comparison-agent-941072884743.asia-southeast1.run.app/
 
 ## Run Locally
 
