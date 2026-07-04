@@ -39,7 +39,11 @@ function authenticate(req: express.Request, res: express.Response, next: express
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: "Unauthorized access. Please log in first." });
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized access. Please log in first.",
+        error: "Unauthorized access. Please log in first."
+      });
       return;
     }
     const token = authHeader.split(' ')[1];
@@ -54,7 +58,11 @@ function authenticate(req: express.Request, res: express.Response, next: express
     (req as any).user = parsedUser;
     next();
   } catch (err) {
-    res.status(401).json({ error: "Invalid or expired login session." });
+    res.status(401).json({
+      success: false,
+      message: "Invalid or expired login session.",
+      error: "Invalid or expired login session."
+    });
   }
 }
 
@@ -65,41 +73,79 @@ function authenticate(req: express.Request, res: express.Response, next: express
 app.post('/api/register', (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
-    res.status(400).json({ error: "All registration fields (name, email, password) are required." });
+    res.status(400).json({
+      success: false,
+      message: "All registration fields (name, email, password) are required.",
+      error: "All registration fields (name, email, password) are required."
+    });
     return;
   }
   try {
     const passwordHash = Buffer.from(password).toString('base64'); // Simple base64 encoding representing password hashing
     const newUser = db.registerUser(name, email, passwordHash);
     const token = Buffer.from(JSON.stringify(newUser)).toString('base64');
-    res.json({ success: true, token, user: newUser });
+    res.json({
+      success: true,
+      message: "Registration successful",
+      data: { token, user: newUser },
+      token,
+      user: newUser
+    });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    console.error("User registration failed on backend:", err);
+    res.status(400).json({
+      success: false,
+      message: err.message || "Registration failed.",
+      error: err.message || "Registration failed."
+    });
   }
 });
 
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    res.status(400).json({ error: "Email and password are required." });
+    res.status(400).json({
+      success: false,
+      message: "Email and password are required.",
+      error: "Email and password are required."
+    });
     return;
   }
   try {
     const user = db.getUserByEmail(email);
     if (!user) {
-      res.status(400).json({ error: "No account exists with this email address." });
+      res.status(400).json({
+        success: false,
+        message: "No account exists with this email address.",
+        error: "No account exists with this email address."
+      });
       return;
     }
     const passwordHash = Buffer.from(password).toString('base64');
     const isValid = db.verifyUserPassword(email, passwordHash);
     if (!isValid) {
-      res.status(400).json({ error: "Incorrect password. Please try again." });
+      res.status(400).json({
+        success: false,
+        message: "Incorrect password. Please try again.",
+        error: "Incorrect password. Please try again."
+      });
       return;
     }
     const token = Buffer.from(JSON.stringify(user)).toString('base64');
-    res.json({ success: true, token, user });
+    res.json({
+      success: true,
+      message: "Login successful",
+      data: { token, user },
+      token,
+      user
+    });
   } catch (err: any) {
-    res.status(500).json({ error: "An unexpected authentication error occurred." });
+    console.error("User login failed on backend:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "An unexpected authentication error occurred.",
+      error: err.message || "An unexpected authentication error occurred."
+    });
   }
 });
 

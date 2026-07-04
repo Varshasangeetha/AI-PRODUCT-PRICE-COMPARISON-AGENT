@@ -44,6 +44,36 @@ import {
 } from 'lucide-react';
 import { VendorListing, Product, SearchRecord, AiRecommendationRecord, Message, FavoriteProduct, ProductRating } from './types';
 
+// Safely parse API response ensuring it is valid JSON and handling errors properly
+async function safeParseResponse(res: Response) {
+  const contentType = res.headers.get('content-type');
+  let data: any = null;
+  let isJson = false;
+
+  if (contentType && contentType.toLowerCase().includes('application/json')) {
+    try {
+      data = await res.json();
+      isJson = true;
+    } catch (err) {
+      console.error("JSON parsing error on response body:", err);
+      isJson = false;
+    }
+  }
+
+  if (!isJson) {
+    const text = await res.text();
+    console.error("Received non-JSON response from server:", text);
+    throw new Error(text || `Request failed with server status ${res.status}`);
+  }
+
+  if (!res.ok) {
+    const errMsg = data.message || data.error || `Server responded with status ${res.status}`;
+    throw new Error(errMsg);
+  }
+
+  return data;
+}
+
 export default function App() {
   // Authentication State
   const [token, setToken] = useState<string | null>(localStorage.getItem('auth_token'));
@@ -150,15 +180,12 @@ export default function App() {
       const res = await fetch('/api/profile', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        setStats(data);
-      } else {
-        handleLogout();
-      }
+      const data = await safeParseResponse(res);
+      setUser(data.user);
+      setStats(data);
     } catch (e) {
       console.error("Error retrieving user profile:", e);
+      handleLogout();
     }
   };
 
@@ -167,11 +194,9 @@ export default function App() {
       const res = await fetch('/api/history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setHistorySearches(data.searches || []);
-        setHistoryRecommendations(data.recommendations || []);
-      }
+      const data = await safeParseResponse(res);
+      setHistorySearches(data.searches || []);
+      setHistoryRecommendations(data.recommendations || []);
     } catch (e) {
       console.error("Error retrieving search history:", e);
     }
@@ -180,12 +205,10 @@ export default function App() {
   const fetchCatalog = async () => {
     try {
       const res = await fetch('/api/products');
-      if (res.ok) {
-        const products = await res.json();
-        setCatalogProducts(products);
-        if (products.length > 0 && !adminListing.productId) {
-          setAdminListing(prev => ({ ...prev, productId: products[0].id }));
-        }
+      const products = await safeParseResponse(res);
+      setCatalogProducts(products || []);
+      if (products && products.length > 0 && !adminListing.productId) {
+        setAdminListing(prev => ({ ...prev, productId: products[0].id }));
       }
     } catch (e) {
       console.error("Error fetching available products catalog:", e);
@@ -199,10 +222,8 @@ export default function App() {
       const res = await fetch('/api/favorites', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setFavorites(data || []);
-      }
+      const data = await safeParseResponse(res);
+      setFavorites(data || []);
     } catch (e) {
       console.error("Error fetching favorites:", e);
     } finally {
@@ -214,10 +235,8 @@ export default function App() {
     setReviewsLoading(true);
     try {
       const res = await fetch(`/api/ratings?productName=${encodeURIComponent(pName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentProductReviews(data || []);
-      }
+      const data = await safeParseResponse(res);
+      setCurrentProductReviews(data || []);
     } catch (e) {
       console.error("Error fetching reviews:", e);
     } finally {
@@ -243,16 +262,21 @@ export default function App() {
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Authentication failed. Please verify credentials.");
+      const data = await safeParseResponse(res);
+      
+      const tokenVal = data.data?.token || data.token;
+      const userVal = data.data?.user || data.user;
+
+      if (!tokenVal) {
+        throw new Error("Authentication succeeded but no token was returned.");
       }
 
-      localStorage.setItem('auth_token', data.token);
-      setToken(data.token);
-      setUser(data.user);
+      localStorage.setItem('auth_token', tokenVal);
+      setToken(tokenVal);
+      setUser(userVal || null);
       triggerToast(authMode === 'login' ? "Welcome back! Login successful." : "Account registered successfully!", "success");
     } catch (err: any) {
+      console.error("Authentication process error:", err);
       setAuthError(err.message);
       triggerToast(err.message, "error");
     } finally {
@@ -368,11 +392,7 @@ export default function App() {
       const res = await fetch(`/api/compare?query=${encodeURIComponent(query)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Comparison search failed.");
-      }
+      const data = await safeParseResponse(res);
 
       setListings(data.listings || []);
       setSearchPerformed(true);
@@ -415,10 +435,7 @@ export default function App() {
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Gemini Vision search failed.");
-      }
+      const data = await safeParseResponse(response);
 
       setImageAnalysis(data.analysis);
       setSearchQuery(data.query);
@@ -454,10 +471,7 @@ export default function App() {
         body: JSON.stringify({ query, listings: currentListings, imageBase64: imgB64 || undefined })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "AI Recommendation model failed to evaluate products.");
-      }
+      const data = await safeParseResponse(res);
 
       setRecommendation(data);
       setChatMessages([
@@ -507,10 +521,7 @@ export default function App() {
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Chat support offline.");
-      }
+      const data = await safeParseResponse(res);
 
       setChatMessages(prev => [
         ...prev,
@@ -546,8 +557,7 @@ export default function App() {
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await safeParseResponse(res);
 
       triggerToast(`Saved ${listing.vendorName} listing to your Favorites!`, "success");
       fetchFavorites();
@@ -564,8 +574,7 @@ export default function App() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await safeParseResponse(res);
 
       triggerToast("Favorite item removed.", "success");
       fetchFavorites();
@@ -594,8 +603,7 @@ export default function App() {
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await safeParseResponse(res);
 
       triggerToast("Review posted successfully!", "success");
       setReviewComment('');
@@ -828,8 +836,7 @@ export default function App() {
         },
         body: JSON.stringify(adminProduct)
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await safeParseResponse(res);
 
       triggerToast("Reference catalog product added successfully!", "success");
       setAdminProduct({ name: '', category: 'Clothing', brand: '', basePrice: 1500 });
@@ -860,8 +867,7 @@ export default function App() {
           productName: selectedProd.name
         })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await safeParseResponse(res);
 
       triggerToast(`Successfully seeded listing for ${selectedProd.name} at ${adminListing.vendorName}`, "success");
       setAdminListing({
